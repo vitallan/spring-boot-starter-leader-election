@@ -1,0 +1,179 @@
+name: Release to Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseVersion:
+        description: "Release version (X.Y.Z)"
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_VERSION: ${{ inputs.releaseVersion }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate releaseVersion
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${RELEASE_VERSION}" ]]; then
+            echo "releaseVersion is required" >&2
+            exit 1
+          fi
+
+          if [[ "${RELEASE_VERSION}" == *SNAPSHOT* ]]; then
+            echo "releaseVersion must not contain SNAPSHOT: ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+
+          if ! [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "releaseVersion must match X.Y.Z: ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+
+          if git ls-remote --tags origin "refs/tags/${RELEASE_VERSION}" | grep -q "refs/tags/${RELEASE_VERSION}$"; then
+            echo "Tag already exists in remote: ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Compute next snapshot version
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IFS='.' read -r major minor patch <<<"${RELEASE_VERSION}"
+          next_patch=$((patch + 1))
+          next_snapshot_version="${major}.${minor}.${next_patch}-SNAPSHOT"
+
+          echo "nextSnapshotVersion=${next_snapshot_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Set versions to releaseVersion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B -DnewVersion="${RELEASE_VERSION}" -DgenerateBackupPoms=false versions:set versions:commit
+
+      - name: Guardrail - only pom.xml changed (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only)"
+          if [[ -z "${changed_files}" ]]; then
+            echo "Expected pom.xml changes but working tree is clean" >&2
+            exit 1
+          fi
+
+          non_poms="$(printf '%s\n' "${changed_files}" | grep -vE '(^|/)pom\.xml$' || true)"
+          if [[ -n "${non_poms}" ]]; then
+            echo "Non-pom.xml files changed during release version set:" >&2
+            printf '%s\n' "${non_poms}" >&2
+            exit 1
+          fi
+
+      - name: Commit release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -am "Release ${RELEASE_VERSION}"
+
+      - name: Push release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+
+      - name: Deploy to Maven Central
+        shell: bash
+        env:
+          # Common for maven-gpg-plugin non-interactive signing.
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          mvn -B -Prelease -DskipTests=false \
+            -pl :leader-election-core,:leader-election-autoconfigure,:leader-election-spring-boot-starter \
+            -am deploy
+
+      - name: Tag published commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag -a "${RELEASE_VERSION}" -m "Release ${RELEASE_VERSION}"
+          git push origin "${RELEASE_VERSION}"
+
+      - name: Set versions to nextSnapshotVersion
+        shell: bash
+        env:
+          NEXT_SNAPSHOT_VERSION: ${{ steps.versions.outputs.nextSnapshotVersion }}
+        run: |
+          set -euo pipefail
+          mvn -B -DnewVersion="${NEXT_SNAPSHOT_VERSION}" -DgenerateBackupPoms=false versions:set versions:commit
+
+      - name: Guardrail - only pom.xml changed (snapshot bump)
+        shell: bash
+        env:
+          NEXT_SNAPSHOT_VERSION: ${{ steps.versions.outputs.nextSnapshotVersion }}
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only)"
+          if [[ -z "${changed_files}" ]]; then
+            echo "Expected pom.xml changes for snapshot bump but working tree is clean" >&2
+            exit 1
+          fi
+
+          non_poms="$(printf '%s\n' "${changed_files}" | grep -vE '(^|/)pom\.xml$' || true)"
+          if [[ -n "${non_poms}" ]]; then
+            echo "Non-pom.xml files changed during snapshot bump:" >&2
+            printf '%s\n' "${non_poms}" >&2
+            exit 1
+          fi
+
+      - name: Commit snapshot bump
+        shell: bash
+        env:
+          NEXT_SNAPSHOT_VERSION: ${{ steps.versions.outputs.nextSnapshotVersion }}
+        run: |
+          set -euo pipefail
+          git commit -am "Bump version to ${NEXT_SNAPSHOT_VERSION}"
+
+      - name: Push snapshot bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main

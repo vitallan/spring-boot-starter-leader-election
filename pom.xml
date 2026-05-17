@@ -11,6 +11,22 @@
 
     <name>Spring Boot Starter Leader Election</name>
     <description>Spring Boot starter for simple database-backed leader election.</description>
+    <url>https://github.com/vitallan/spring-boot-starter-leader-election</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/license/mit/</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/vitallan/spring-boot-starter-leader-election.git</url>
+        <connection>scm:git:https://github.com/vitallan/spring-boot-starter-leader-election.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/vitallan/spring-boot-starter-leader-election.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
         <module>leader-election-core</module>
@@ -25,6 +41,11 @@
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
     </properties>
 
     <developers>
@@ -64,6 +85,26 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.2.5</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>${maven-gpg-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>${central-publishing-maven-plugin.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -75,6 +116,76 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <source>${java.version}</source>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                            <passphrase>${env.MAVEN_GPG_PASSPHRASE}</passphrase>
+                        </configuration>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
