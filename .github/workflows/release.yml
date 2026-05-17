@@ -32,9 +32,31 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          server-id: central
-          server-username: CENTRAL_USERNAME
-          server-password: CENTRAL_PASSWORD
+
+      - name: Configure Maven settings (Central credentials)
+        shell: bash
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.m2"
+
+          cat > "$HOME/.m2/settings.xml" <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${CENTRAL_USERNAME}</username>
+                <password>${CENTRAL_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+          chmod 600 "$HOME/.m2/settings.xml"
 
       - name: Configure git author
         run: |
@@ -113,12 +135,6 @@ jobs:
           set -euo pipefail
           git commit -am "Release ${RELEASE_VERSION}"
 
-      - name: Push release commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          git push origin HEAD:main
-
       - name: Deploy to Maven Central
         shell: bash
         env:
@@ -129,6 +145,12 @@ jobs:
           mvn -B -Prelease -DskipTests=false \
             -pl :leader-election-core,:leader-election-autoconfigure,:leader-election-spring-boot-starter \
             -am deploy
+
+      - name: Push release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
 
       - name: Tag published commit
         shell: bash

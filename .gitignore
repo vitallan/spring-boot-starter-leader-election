@@ -1,6 +1,9 @@
 target/
 !.mvn/wrapper/maven-wrapper.jar
 
+# Local exported CI logs
+logs/
+
 ### IntelliJ IDEA ###
 .idea/
 *.iws
