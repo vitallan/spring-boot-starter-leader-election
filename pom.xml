@@ -6,7 +6,7 @@
 
     <groupId>com.allanvital</groupId>
     <artifactId>spring-boot-starter-leader-election</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
     <packaging>pom</packaging>
 
     <name>Spring Boot Starter Leader Election</name>
