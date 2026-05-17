@@ -23,7 +23,7 @@ Add the starter:
 <dependency>
     <groupId>com.allanvital</groupId>
     <artifactId>leader-election-spring-boot-starter</artifactId>
-    <version>${leader-election.version}</version>
+    <version>0.0.2</version>
 </dependency>
 ```
 
